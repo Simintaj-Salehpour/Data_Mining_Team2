@@ -13,9 +13,8 @@ import seaborn as sns
 # -------------------------------
 # 1. LOAD DATA
 # -------------------------------
-df = pd.read_csv("Hospital_Inpatient_Discharges_2024.csv")
-df = df[df["Hospital County"] == "Niagara"]
-
+raw_df = pd.read_csv("Hospital_Inpatient_Discharges_2024.csv")
+df = raw_df.copy()
 # --------------------------
 # 2. SELECT RELEVANT COLUMNS
 # --------------------------
@@ -56,4 +55,5 @@ print(charges_stats)
 print("\n")
 
 # %%
+
 
