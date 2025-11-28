@@ -54,6 +54,23 @@ print("Median Total Charges by Age Group:")
 print(charges_stats)
 print("\n")
 
+# -------------------------------
+# 5. VISUALIZATIONS
+# -------------------------------
+
+# Boxplot: LOS by Age Group
+plt.figure(figsize=(12, 6))
+sns.boxplot(data=df, x="Age Group", y="Length of Stay")
+plt.title("Length of Stay by Age Group")
+plt.xlabel("Age Group")
+plt.ylabel("Length of Stay (days)")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+
+
 # %%
+
 
 
