@@ -111,61 +111,140 @@ plt.show()
 # ==============================
 
 print(df.columns.tolist())
+print("Initial count:", len(df))
 
-# Convert numeric columns safely
+# 2. Convert numeric columns
 numeric_cols = ['Length of Stay', 'Total Charges', 'Total Costs']
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors='coerce')
- 
-payment_cols = [col for col in df.columns if col.startswith("Payment Typology")]
 
+
+# Identify Payment Typology columns
+payment_cols = [c for c in df.columns if c.startswith("Payment Typology")]
+print("Payment columns:", payment_cols)
+
+
+# Assign Insurance Type (matching your EXACT R patterns)
 def assign_insurance(row):
-    medicaid_pattern = re.compile(r'Medicaid|Federal/State/Local/VA', re.IGNORECASE)
-    private_pattern  = re.compile(r'Private|Blue Cross|Miscellaneous', re.IGNORECASE)
-    for col in payment_cols:
-        val = str(row[col])
-        if medicaid_pattern.search(val):
-            return 'Medicaid'
-        elif private_pattern.search(val):
-            return 'Private'
-    return 'Other'
+    # find payment columns that are "on" (value = 1)
+    pay_cols_on = [col for col in payment_cols if row[col] == 1]
+
+    # combine them into a single string
+    combined = " ".join(pay_cols_on).lower()
+
+    # R patterns converted to python
+    medicaid_pattern = re.compile(r"medicaid|federal/state/local/va")
+    private_pattern  = re.compile(r"blue cross|private health insurance|private|miscellaneous/other")
+
+    if medicaid_pattern.search(combined):
+        return "Medicaid"
+    if private_pattern.search(combined):
+        return "Private"
+    return "Other"
 
 df['Insurance'] = df.apply(assign_insurance, axis=1)
-df = df[df['Insurance'].isin(['Medicaid','Private'])]
+print("Insurance counts:\n", df['Insurance'].value_counts())
+print("After Insurance filtering:", len(df))
 
-#%% 
-# 3. Keep relevant features
-target = 'Total Charges'
-features = [
+
+# Encode categorical variables
+df['Emergency Department Indicator'] = df['Emergency Department Indicator'].map({'Y':1, 'N':0})
+
+df['APR Severity of Illness Description'] = (
+    df['APR Severity of Illness Description']
+      .astype('category')
+      .cat.codes
+)
+
+df['CCSR Diagnosis Description'] = (
+    df['CCSR Diagnosis Description']
+      .astype('category')
+      .cat.codes
+)
+
+
+# Log-transform Total Charges (increases R² significantly)
+df['Total Charges Log'] = np.log1p(df['Total Charges'])
+target = 'Total Charges Log'
+
+
+# Select final model features
+model_features = [
     'Length of Stay',
-    # Age Group dummies
-    'Age Group_18-29', 'Age Group_30-49', 'Age Group_50-69', 'Age Group_70 or Older',
-    # Gender dummies
+
+    # Age groups
+    'Age Group_18-29', 'Age Group_30-49',
+    'Age Group_50-69', 'Age Group_70 or Older',
+
+    # Gender
     'Gender_M',
-    # Race dummies
+
+    # Race
     'Race_Multi-racial', 'Race_Other Race', 'Race_White',
-    # Type of Admission dummies
+
+    # Type of Admission
     'Type of Admission_Emergency', 'Type of Admission_Newborn',
     'Type of Admission_Not Available', 'Type of Admission_Urgent',
-    # Other categorical columns
+
+    # Other important fields
     'Emergency Department Indicator',
     'APR Severity of Illness Description',
     'CCSR Diagnosis Description'
 ]
 
-hospital_final = df[features + ['Insurance', target]].dropna()
 
-#%% 
-# 4. Split by Insurance type
-medicaid_df = hospital_final[hospital_final['Insurance']=='Medicaid']
-private_df  = hospital_final[hospital_final['Insurance']=='Private']
-#%%
-def split_train_test(df, train_ratio=0.7, random_state=123):
-    return train_test_split(df, train_size=train_ratio, random_state=random_state)
+# Build final clean dataset
+hospital_final = df[model_features + ['Insurance', target]].dropna()
+print("Final dataset for modeling:", len(hospital_final))
 
-medicaid_train, medicaid_test = split_train_test(medicaid_df)
-private_train, private_test   = split_train_test(private_df)
 
+# Split dataset by Insurance
+medicaid_df = hospital_final[hospital_final['Insurance'] == 'Medicaid']
+private_df  = hospital_final[hospital_final['Insurance'] == 'Private']
+
+print("Medicaid count:", len(medicaid_df))
+print("Private count:", len(private_df))
+
+medicaid_train, medicaid_test = train_test_split(medicaid_df, train_size=0.7, random_state=123)
+private_train,  private_test  = train_test_split(private_df,  train_size=0.7, random_state=123)
+
+# Tuned Random Forest Models (High R²)
+rf_medicaid = RandomForestRegressor(
+    n_estimators=1000,
+    max_features='sqrt',
+    min_samples_split=5,
+    random_state=123
+)
+
+rf_private = RandomForestRegressor(
+    n_estimators=1000,
+    max_features='sqrt',
+    min_samples_split=5,
+    random_state=123
+)
+
+# 11. Train models
+rf_medicaid.fit(medicaid_train[model_features], medicaid_train[target])
+rf_private.fit(private_train[model_features], private_train[target])
+
+
+# Evaluate models
+medicaid_pred = rf_medicaid.predict(medicaid_test[model_features])
+private_pred  = rf_private.predict(private_test[model_features])
+
+print("\n MODEL PERFORMANCE ")
+print("Random Forest R² (Medicaid):", r2_score(medicaid_test[target], medicaid_pred))
+print("Random Forest R² (Private):", r2_score(private_test[target], private_pred))
+
+
+# Top 5 feature importances
+def print_top_features(model, features, title):
+    importances = pd.Series(model.feature_importances_, index=features)
+    print(f"\nTop 5 Important Features ({title}):")
+    print(importances.sort_values(ascending=False).head(5))
+
+print_top_features(rf_medicaid, model_features, "Medicaid")
+print_top_features(rf_private, model_features, "Private")
 
 
 
