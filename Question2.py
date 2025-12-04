@@ -36,37 +36,6 @@ print(df.describe())
 
 
 #%%
-# ==============================
-# 3. Data Cleaning / Preprocessing
-# ==============================
-
-# Convert numeric columns safely
-numeric_cols = ['Length of Stay', 'Total Charges', 'Total Costs']
-for col in numeric_cols:
-    df[col] = pd.to_numeric(df[col], errors='coerce')
-
-# Drop rows with missing key features
-key_features = ['Age Group', 'Length of Stay', 'Payment Typology 1','Total Charges', 'Total Costs']
-print(f"Rows before dropna: {len(df)}")
-df = df.dropna(subset=key_features)
-print(f"Rows after dropna: {len(df)}")
-
-# Encode categorical variables
-categorical_features = ['Age Group', 'Gender', 'Race', 'Ethnicity', 'Type of Admission', 'Payment Typology 1', 'Payment Typology 2', 'Payment Typology 3']
-df = pd.get_dummies(df, columns=categorical_features, drop_first=True)
-
-# Optional: Scale numeric features
-numeric_features = ['Length of Stay', 'Total Charges', 'Total Costs']
-scaler = StandardScaler()
-df[numeric_features] = scaler.fit_transform(df[numeric_features])
-
-# Quick check after cleaning
-print(df.info())
-print(df.head())
-
-
-
-
 
 #%% 
 # ==============================
