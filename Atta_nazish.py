@@ -73,6 +73,8 @@ print(f"""The correlation coefficient of approximately {corr:.2f}
 #  CORRELATION VISUALIZATION
 
 plt.figure(figsize=(8, 6))
+plt.text(5, 300000, "r = 0.78 (Strong Positive Correlation)", color="red", fontsize=12)
+
 sns.scatterplot(data=df, x="Length of Stay", y="Total Charges", alpha=0.6)
 sns.regplot(data=df, x="Length of Stay", y="Total Charges", scatter=False, color="red")
 
