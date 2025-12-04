@@ -13,11 +13,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import re
+import statsmodels.api as sm
+from sklearn.metrics import mean_squared_error, r2_score, confusion_matrix, accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import mean_squared_error, r2_score, classification_report
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.metrics import confusion_matrix, accuracy_score
+
 
 
 #%%
@@ -33,40 +37,28 @@ print(df.info())
 print(df.describe())
 
 
-
-
-
 #%%
 # ==============================
 # 3. Data Cleaning / Preprocessing
 # ==============================
 
 # Convert numeric columns safely
+# Convert numeric columns safely (does NOT modify structure)
 numeric_cols = ['Length of Stay', 'Total Charges', 'Total Costs']
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors='coerce')
 
-# Drop rows with missing key features
-key_features = ['Age Group', 'Length of Stay', 'Payment Typology 1','Total Charges', 'Total Costs']
+# Drop rows with missing key features (keeps structure the same)
+key_features = ['Age Group', 'Length of Stay', 'Payment Typology 1',
+                'Total Charges', 'Total Costs']
+
 print(f"Rows before dropna: {len(df)}")
 df = df.dropna(subset=key_features)
 print(f"Rows after dropna: {len(df)}")
 
-# Encode categorical variables
-categorical_features = ['Age Group', 'Gender', 'Race', 'Ethnicity', 'Type of Admission', 'Payment Typology 1', 'Payment Typology 2', 'Payment Typology 3']
-df = pd.get_dummies(df, columns=categorical_features, drop_first=True)
-
-# Optional: Scale numeric features
-numeric_features = ['Length of Stay', 'Total Charges', 'Total Costs']
-scaler = StandardScaler()
-df[numeric_features] = scaler.fit_transform(df[numeric_features])
 
 # Quick check after cleaning
 print(df.info())
-print(df.head())
-
-
-
 
 
 #%% 
@@ -110,145 +102,212 @@ plt.show()
 # 5. SMART Question 1: What combination of patient demographics, admission type, and comorbidities predicts the lowest hospital charges for Medicaid vs. Private Insurance patients in 2024?
 # ==============================
 
-print(df.columns.tolist())
-print("Initial count:", len(df))
+print(" SMART Question 1: What combination of patient demographics, admission type, and comorbidities predicts the lowest hospital charges for Medicaid vs. Private Insurance patients in 2024?")
 
-# 2. Convert numeric columns
-numeric_cols = ['Length of Stay', 'Total Charges', 'Total Costs']
-for col in numeric_cols:
-    df[col] = pd.to_numeric(df[col], errors='coerce')
+# CLEANING
+df["Total Charges"] = (
+    df["Total Charges"]
+    .astype(str)
+    .str.replace(r"[^0-9.]", "", regex=True)
+    .astype(float)
+)
 
+df["Length of Stay"] = pd.to_numeric(df["Length of Stay"], errors="coerce")
 
-# Identify Payment Typology columns
+clean_data = df[
+    df["Total Charges"].notna() &
+    np.isfinite(df["Total Charges"]) &
+    (df["Total Charges"] > 0)
+]
+
+# INSURANCE LABELING
 payment_cols = [c for c in df.columns if c.startswith("Payment Typology")]
 print("Payment columns:", payment_cols)
+medicaid_pattern = r"(Medicaid|federal/state/local/va)"
+private_pattern  = r"(Blue Cross/Blue Shield|Private Health Insurance|Miscellaneous/Other)"
+dpayment_cols = [c for c in df.columns if c.startswith("Payment Typology")]
 
-
-# Assign Insurance Type (matching your EXACT R patterns)
 def assign_insurance(row):
-    # find payment columns that are "on" (value = 1)
-    pay_cols_on = [col for col in payment_cols if row[col] == 1]
-
-    # combine them into a single string
-    combined = " ".join(pay_cols_on).lower()
-
-    # R patterns converted to python
-    medicaid_pattern = re.compile(r"medicaid|federal/state/local/va")
-    private_pattern  = re.compile(r"blue cross|private health insurance|private|miscellaneous/other")
-
-    if medicaid_pattern.search(combined):
+    combined = " ".join([str(row[col]).lower() for col in payment_cols])
+    if ("medicaid" in combined) or ("federal/state/local/va" in combined):
         return "Medicaid"
-    if private_pattern.search(combined):
+
+    if ("private health insurance" in combined) or ("blue cross" in combined) or ("miscellaneous/other" in combined):
         return "Private"
     return "Other"
 
-df['Insurance'] = df.apply(assign_insurance, axis=1)
-print("Insurance counts:\n", df['Insurance'].value_counts())
+clean_data['Insurance'] = df.apply(assign_insurance, axis=1)
+print("Insurance counts:\n", clean_data['Insurance'].value_counts())
 print("After Insurance filtering:", len(df))
 
-
-# Encode categorical variables
-df['Emergency Department Indicator'] = df['Emergency Department Indicator'].map({'Y':1, 'N':0})
-
-df['APR Severity of Illness Description'] = (
-    df['APR Severity of Illness Description']
-      .astype('category')
-      .cat.codes
-)
-
-df['CCSR Diagnosis Description'] = (
-    df['CCSR Diagnosis Description']
-      .astype('category')
-      .cat.codes
-)
-
-
-# Log-transform Total Charges (increases R² significantly)
-df['Total Charges Log'] = np.log1p(df['Total Charges'])
-target = 'Total Charges Log'
-
-
-# Select final model features
-model_features = [
-    'Length of Stay',
-
-    # Age groups
-    'Age Group_18-29', 'Age Group_30-49',
-    'Age Group_50-69', 'Age Group_70 or Older',
-
-    # Gender
-    'Gender_M',
-
-    # Race
-    'Race_Multi-racial', 'Race_Other Race', 'Race_White',
-
-    # Type of Admission
-    'Type of Admission_Emergency', 'Type of Admission_Newborn',
-    'Type of Admission_Not Available', 'Type of Admission_Urgent',
-
-    # Other important fields
-    'Emergency Department Indicator',
-    'APR Severity of Illness Description',
-    'CCSR Diagnosis Description'
+# KEEP RELEVANT COLUMNS
+columns_to_keep = [
+  'Age Group', 'Gender','Race', 'Length of Stay','Type of Admission',
+  'Emergency Department Indicator','APR Severity of Illness Description',
+  'APR DRG Code','CCSR Diagnosis Description',
+  'Insurance','Total Charges'
 ]
 
+hospital_final = clean_data[columns_to_keep].copy()
 
-# Build final clean dataset
-hospital_final = df[model_features + ['Insurance', target]].dropna()
-print("Final dataset for modeling:", len(hospital_final))
+# LUMP RARE LEVELS (fct_lump_min)
+def lump_min(series, min_count=20):
+    counts = series.value_counts()
+    rare = counts[counts < min_count].index
+    return series.replace(rare, "Other").fillna("Other")
+
+factors_to_fix = [
+    "Age Group","Gender","Race","Type of Admission",
+    "Emergency Department Indicator",
+    "APR Severity of Illness Description",
+    "CCSR Diagnosis Description"
+]
+
+for f in factors_to_fix:
+    hospital_final[f] = lump_min(hospital_final[f].astype(str))
+
+# REMOVE NA PREDICTORS
+predictors = [
+    'Age Group', 'Gender','Race', 'Length of Stay','Type of Admission',
+  'Emergency Department Indicator','APR Severity of Illness Description',
+  'APR DRG Code','CCSR Diagnosis Description'
+]
+
+hospital_final = hospital_final.dropna(subset=predictors)
+
+# SPLIT BY INSURANCE
+Medicaid_df = hospital_final[hospital_final["Insurance"] == "Medicaid"]
+Private_df  = hospital_final[hospital_final["Insurance"] == "Private"]
+
+Medicaid_df = Medicaid_df.copy()
+Private_df  = Private_df.copy()
+
+# Define categorical columns
+cat_cols = ["Age Group", "Gender", "Race", "Type of Admission",
+            "APR Severity of Illness Description", "CCSR Diagnosis Description"]
+
+# Clean columns
+for df in [Medicaid_df, Private_df]:
+    # Map Y/N to 1/0
+    df["Emergency Department Indicator"] = df["Emergency Department Indicator"].map({"Y": 1, "N": 0})
+    # Ensure Total Charges numeric
+    df["Total Charges"] = pd.to_numeric(df["Total Charges"], errors="coerce")
+    # Strip whitespace and convert to string for categorical columns
+    for col in cat_cols:
+        df[col] = df[col].astype(str).str.strip()
+
+# Linear Regression
+def run_linear_regression(df, group_name):
+    features = ["Length of Stay", "Emergency Department Indicator"] + cat_cols
+    X = pd.get_dummies(df[features], drop_first=True).astype(float)
+    y = df["Total Charges"].astype(float)
+
+    # Drop rows with NaN
+    valid = (~X.isnull().any(axis=1)) & (~y.isnull()) & np.isfinite(y)
+    X = X.loc[valid]
+    y = y.loc[valid]
+
+    X = sm.add_constant(X)
+    model = sm.OLS(y, X).fit()
+
+    print(f"\n===== LINEAR REGRESSION ({group_name}) =====")
+    print(model.summary())
+    return model
 
 
-# Split dataset by Insurance
-medicaid_df = hospital_final[hospital_final['Insurance'] == 'Medicaid']
-private_df  = hospital_final[hospital_final['Insurance'] == 'Private']
+# Logistic Regression (GLM)
+def run_logistic_regression(df, group_name):
+    median_charge = df["Total Charges"].median()
+    df["LowCharge"] = (df["Total Charges"] <= median_charge).astype(int)
 
-print("Medicaid count:", len(medicaid_df))
-print("Private count:", len(private_df))
+    features = ["Length of Stay", "Emergency Department Indicator"] + cat_cols
+    X = pd.get_dummies(df[features], drop_first=True).astype(float)
+    y = df["LowCharge"]
 
-medicaid_train, medicaid_test = train_test_split(medicaid_df, train_size=0.7, random_state=123)
-private_train,  private_test  = train_test_split(private_df,  train_size=0.7, random_state=123)
+    valid = (~X.isnull().any(axis=1)) & (~y.isnull()) & np.isfinite(y)
+    X = X.loc[valid]
+    y = y.loc[valid]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
-# Tuned Random Forest Models (High R²)
-rf_medicaid = RandomForestRegressor(
-    n_estimators=1000,
-    max_features='sqrt',
-    min_samples_split=5,
-    random_state=123
-)
+    model = LogisticRegression(max_iter=5000)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
 
-rf_private = RandomForestRegressor(
-    n_estimators=1000,
-    max_features='sqrt',
-    min_samples_split=5,
-    random_state=123
-)
+    print(f"\n===== LOGISTIC REGRESSION ({group_name}) =====")
+    print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+    print("Accuracy:", round(accuracy_score(y_test, y_pred), 4))
 
-# 11. Train models
-rf_medicaid.fit(medicaid_train[model_features], medicaid_train[target])
-rf_private.fit(private_train[model_features], private_train[target])
+    # GLM with p-values
+    X_glm = sm.add_constant(X)
+    glm_model = sm.GLM(y, X_glm, family=sm.families.Binomial()).fit()
+    print("\n--- GLM with p-values ---")
+    print(glm_model.summary())
+    return glm_model
+
+# Random Forest
+def run_random_forest(df, group_name):
+    features = ["Length of Stay", "Emergency Department Indicator"] + cat_cols
+    X = df[features]
+    y = df["Total Charges"].astype(float)
+
+    valid = X.notnull().all(axis=1) & y.notnull() & np.isfinite(y)
+    X = X.loc[valid]
+    y = y.loc[valid]
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+    # Get dummies on train
+    X_train_dummies = pd.get_dummies(X_train, drop_first=True)
+    # Apply same columns to test, fill missing with 0
+    X_test_dummies = pd.get_dummies(X_test, drop_first=True)
+    X_test_dummies = X_test_dummies.reindex(columns=X_train_dummies.columns, fill_value=0)
+
+    # Fit Random Forest
+    rf = RandomForestRegressor(n_estimators=500, random_state=42)
+    rf.fit(X_train_dummies, y_train)
+    y_pred = rf.predict(X_test_dummies)
+
+    # Evaluation
+    mse = mean_squared_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+    print(f"\n===== RANDOM FOREST ({group_name}) =====")
+    print("Mean Squared Error:", mse)
+    print("R²:", r2)
+
+    # Feature importance
+    importances = pd.Series(rf.feature_importances_, index=X_train_dummies.columns)
+    # Aggregate importance by original feature (e.g., sum dummy contributions)
+    agg_importances = importances.groupby(lambda x: x.split("_")[0] if "_" in x else x).sum()
+    agg_importances = agg_importances.sort_values(ascending=False)
+
+    print("Top 10 Features by Importance:\n", agg_importances.head(10))
+
+    # Plot top 10 features
+    plt.figure(figsize=(10,6))
+    sns.barplot(x=agg_importances.head(15), y=agg_importances.head(15).index)
+    plt.title(f"Top Features - Random Forest ({group_name})")
+    plt.xlabel("Importance")
+    plt.ylabel("Feature")
+    plt.show()
+
+    return agg_importances
 
 
-# Evaluate models
-medicaid_pred = rf_medicaid.predict(medicaid_test[model_features])
-private_pred  = rf_private.predict(private_test[model_features])
-
-print("\n MODEL PERFORMANCE ")
-print("Random Forest R² (Medicaid):", r2_score(medicaid_test[target], medicaid_pred))
-print("Random Forest R² (Private):", r2_score(private_test[target], private_pred))
+#Run linear model, logistic regression and random forest
+for df, name in zip([Medicaid_df, Private_df], ["Medicaid", "Private"]):
+    run_linear_regression(df, name)
+    run_logistic_regression(df, name)
+    run_random_forest(df, name)
 
 
-# Top 5 feature importances
-def print_top_features(model, features, title):
-    importances = pd.Series(model.feature_importances_, index=features)
-    print(f"\nTop 5 Important Features ({title}):")
-    print(importances.sort_values(ascending=False).head(5))
-
-print_top_features(rf_medicaid, model_features, "Medicaid")
-print_top_features(rf_private, model_features, "Private")
+print("Results:\n")
+print("Linear Regression shows good model fit for Medicaid and moderate for Private.")
+print("Logistic Regression is more accurate for Medicaid low charges prediction.")
+print("Random Forest identifies Length of Stay and Diagnosis/Severity as dominant predictors.")
+print("Overall, Medicaid hospital charges are better predicted than Private charges.")
 
 
-
-#%% 
+#%%
 # ==============================
 # 6. SMART Question 2: For all Hospital Inpatient Discharges in Niagara County, NY in 2024 with a Primary Diagnosis Code starting with Heart Failure, how does the median Total Charges vary across all defined Age Groups in the Niagara County subset of the data? Can a regression model predict a patient’s total hospital charges for heart failure with a root mean squared error (RMSE) below $5,000, using age group, length of stay, and payer type as predictors?
 # ==============================
