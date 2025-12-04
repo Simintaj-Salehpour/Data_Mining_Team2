@@ -4,74 +4,6 @@ Data Mining Project: Examining the Relationship Between Demographics, Admission 
 Niagara County Inpatients (SPARCS 2024)
 Authors: Simintaj Salehpour, Nazish Atta, Alex Biuckians
 """
-#%% 
-# ==============================
-# 1. Import Libraries
-# ==============================
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.metrics import mean_squared_error, r2_score, classification_report
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-
-#%%
-# ==============================
-# 2. Load Dataset
-# ==============================
-#file_path = "Hospital_Inpatient_Discharges_2024"
-df = pd.read_csv("Hospital_Inpatient_Discharges_2024.csv")
-
-# Quick look
-print(df.head())
-print(df.info())
-print(df.describe())
-
-
-
-
-
-#%%
-
-#%% 
-# ==============================
-# 4. Exploratory Data Analysis (EDA)
-# ==============================
-
-# Summary statistics for numeric columns
-numeric_cols = ['Length of Stay', 'Total Charges', 'Total Costs']
-print(df[numeric_cols].describe())
-
-# Categorical distributions (before encoding)
-categorical_cols = ['Age Group', 'Gender', 'Race', 'Ethnicity', 'Type of Admission', 
-                    'Payment Typology 1','Payment Typology 2','Payment Typology 3']
-
-for col in categorical_cols:
-    if col in df.columns:
-        plt.figure(figsize=(8,4))
-        sns.countplot(x=col, data=df)
-        plt.title(f"Distribution of {col}")
-        plt.xticks(rotation=45)
-        plt.show()
-
-# Numeric distributions
-for col in numeric_cols:
-    if col in df.columns:
-        plt.figure(figsize=(8,4))
-        sns.histplot(df[col], kde=True)
-        plt.title(f"Distribution of {col}")
-        plt.show()
-
-# Correlation heatmap for numeric features
-plt.figure(figsize=(10,8))
-sns.heatmap(df[numeric_cols].corr(), annot=True, cmap='coolwarm')
-plt.title("Correlation Heatmap of Numeric Features")
-plt.show()
-
 
 
 
@@ -106,9 +38,7 @@ hf = df[
     (df["Discharge Year"] == 2024) &
     (df["CCSR Diagnosis Code"] == "CIR019")
 ]
-
 print("Number of Heart Failure cases:", len(hf))
-
 medians = (
     hf.groupby("Age Group")["Total Charges"]
       .agg(["count", "median", "mean", "std"])
@@ -177,7 +107,37 @@ rf_preds_test = pipe_rf.predict(X_test)
 rf_rmse_test = math.sqrt(mean_squared_error(y_test, rf_preds_test))
 print("Test RMSE:", round(rf_rmse_test, 2))
 
-print("\n==== SUMMARY ====")
-print("Median Charges by Age Group displayed above.")
-print("Linear Regression Test RMSE:", round(lm_rmse_test, 2))
-print("Random Forest Test RMSE:", round(rf_rmse_test, 2))
+print("\n==== GOAL ASSESSMENT (RMSE < $5,000) ====")
+print("Linear Regression achieved RMSE:", round(lm_rmse_test, 2))
+print("Random Forest achieved RMSE:", round(rf_rmse_test, 2))
+
+if lm_rmse_test < 5000 or rf_rmse_test < 5000:
+    print("✓ A model met the goal (< $5,000 RMSE).")
+else:
+    print("✗ No model met the goal (< $5,000 RMSE). Charges are too variable to predict precisely.")
+
+age_order = ["30-49", "50-69", "70 or Older"]
+hf["Age Group"] = pd.Categorical(hf["Age Group"], categories=age_order, ordered=True)
+
+# 2. Create the box plot
+plt.figure(figsize=(10, 6))
+sns.boxplot(
+    x="Age Group",
+    y="Total Charges",
+    data=hf,
+)
+
+# 3. Apply logarithmic scale to the y-axis (crucial for skewed cost data)
+plt.yscale("log") 
+
+# 4. Add labels, title, and adjust appearance
+plt.title("Distribution of Total Charges by Age Group (Log Scale)", fontsize=16)
+plt.xlabel("Age Group", fontsize=12)
+plt.ylabel("Total Charges (Log Scale)", fontsize=12)
+plt.grid(axis='y', linestyle='--')
+plt.tight_layout()
+
+# 5. Save the plot
+plt.savefig("charges_by_age_boxplot.png")
+# plt.show() # Use this only if you are in a local environment (do not use in the VM)
+# %%
