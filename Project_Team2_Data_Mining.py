@@ -137,15 +137,16 @@ def assign_insurance(row):
     return "Other"
 
 clean_data['Insurance'] = df.apply(assign_insurance, axis=1)
+clean_data['ChargePerDay']=clean_data['Total Charges']/clean_data['Length of Stay']
+
 print("Insurance counts:\n", clean_data['Insurance'].value_counts())
 print("After Insurance filtering:", len(df))
-
 # KEEP RELEVANT COLUMNS
 columns_to_keep = [
   'Age Group', 'Gender','Race', 'Length of Stay','Type of Admission',
   'Emergency Department Indicator','APR Severity of Illness Description',
   'APR DRG Code','CCSR Diagnosis Description',
-  'Insurance','Total Charges'
+  'Insurance','Total Charges','ChargePerDay'
 ]
 
 hospital_final = clean_data[columns_to_keep].copy()
@@ -168,7 +169,7 @@ for f in factors_to_fix:
 
 # REMOVE NA PREDICTORS
 predictors = [
-    'Age Group', 'Gender','Race', 'Length of Stay','Type of Admission',
+    'Age Group', 'Gender','Race','Type of Admission',
   'Emergency Department Indicator','APR Severity of Illness Description',
   'APR DRG Code','CCSR Diagnosis Description'
 ]
@@ -198,7 +199,7 @@ for df in [Medicaid_df, Private_df]:
 
 # Linear Regression
 def run_linear_regression(df, group_name):
-    features = ["Length of Stay", "Emergency Department Indicator"] + cat_cols
+    features = ["Emergency Department Indicator"] + cat_cols
     X = pd.get_dummies(df[features], drop_first=True).astype(float)
     y = df["Total Charges"].astype(float)
 
@@ -220,7 +221,7 @@ def run_logistic_regression(df, group_name):
     median_charge = df["Total Charges"].median()
     df["LowCharge"] = (df["Total Charges"] <= median_charge).astype(int)
 
-    features = ["Length of Stay", "Emergency Department Indicator"] + cat_cols
+    features = ["Emergency Department Indicator"] + cat_cols
     X = pd.get_dummies(df[features], drop_first=True).astype(float)
     y = df["LowCharge"]
 
@@ -246,9 +247,9 @@ def run_logistic_regression(df, group_name):
 
 # Random Forest
 def run_random_forest(df, group_name):
-    features = ["Length of Stay", "Emergency Department Indicator"] + cat_cols
+    features = ["Emergency Department Indicator"] + cat_cols
     X = df[features]
-    y = df["Total Charges"].astype(float)
+    y = df["ChargePerDay"].astype(float)
 
     valid = X.notnull().all(axis=1) & y.notnull() & np.isfinite(y)
     X = X.loc[valid]
