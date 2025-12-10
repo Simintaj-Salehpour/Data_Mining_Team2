@@ -307,7 +307,7 @@ print("Linear Regression shows good model fit for Medicaid and moderate for Priv
 print("Logistic Regression is more accurate for Medicaid low charges prediction.")
 print("Random Forest identifies Length of Stay and Diagnosis/Severity as dominant predictors.")
 print("Overall, Medicaid hospital charges are better predicted than Private charges.")
-
+print("Due to the strong correlation between Total Charges and Length of Stay (LOS), Random Forest models used Charge per Day (Total Charges ÷ LOS) to prevent LOS from dominating the prediction. This adjustment allowed the model to identify the underlying clinical factors that drive differences in daily cost. Random Forest models performed more consistently for Medicaid patients, showing clearer feature-importance patterns and stronger predictive behavior. Once LOS was neutralized, the most influential predictors for both insurance groups were Diagnosis Category, APR Severity of Illness, and Age group. This indicates that clinical complexity and acuity are key determinants of daily hospital cost, independent of LOS.")
 
 #%%
 
