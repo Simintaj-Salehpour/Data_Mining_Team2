@@ -101,7 +101,6 @@ plt.show()
 # ==============================
 # 5. SMART Question 1: What combination of patient demographics, admission type, and comorbidities predicts the lowest hospital charges for Medicaid vs. Private Insurance patients in 2024?
 # ==============================
-
 print(" SMART Question 1: What combination of patient demographics, admission type, and comorbidities predicts the lowest hospital charges for Medicaid vs. Private Insurance patients in 2024?")
 
 # CLEANING
@@ -137,10 +136,10 @@ def assign_insurance(row):
     return "Other"
 
 clean_data['Insurance'] = df.apply(assign_insurance, axis=1)
-clean_data['ChargePerDay']=clean_data['Total Charges']/clean_data['Length of Stay']
-
 print("Insurance counts:\n", clean_data['Insurance'].value_counts())
 print("After Insurance filtering:", len(df))
+clean_data['ChargePerDay']=clean_data['Total Charges']/clean_data['Length of Stay']
+
 # KEEP RELEVANT COLUMNS
 columns_to_keep = [
   'Age Group', 'Gender','Race', 'Length of Stay','Type of Admission',
@@ -169,7 +168,7 @@ for f in factors_to_fix:
 
 # REMOVE NA PREDICTORS
 predictors = [
-    'Age Group', 'Gender','Race','Type of Admission',
+    'Age Group', 'Gender','Race', 'Length of Stay','Type of Admission',
   'Emergency Department Indicator','APR Severity of Illness Description',
   'APR DRG Code','CCSR Diagnosis Description'
 ]
@@ -199,7 +198,7 @@ for df in [Medicaid_df, Private_df]:
 
 # Linear Regression
 def run_linear_regression(df, group_name):
-    features = ["Emergency Department Indicator"] + cat_cols
+    features = ["Length of Stay", "Emergency Department Indicator"] + cat_cols
     X = pd.get_dummies(df[features], drop_first=True).astype(float)
     y = df["Total Charges"].astype(float)
 
@@ -221,7 +220,7 @@ def run_logistic_regression(df, group_name):
     median_charge = df["Total Charges"].median()
     df["LowCharge"] = (df["Total Charges"] <= median_charge).astype(int)
 
-    features = ["Emergency Department Indicator"] + cat_cols
+    features = ["Length of Stay", "Emergency Department Indicator"] + cat_cols
     X = pd.get_dummies(df[features], drop_first=True).astype(float)
     y = df["LowCharge"]
 
@@ -244,6 +243,8 @@ def run_logistic_regression(df, group_name):
     print("\n--- GLM with p-values ---")
     print(glm_model.summary())
     return glm_model
+
+
 
 # Random Forest
 def run_random_forest(df, group_name):
